@@ -1,7 +1,7 @@
 # GUI layers 1-2: graphics core, assets, controls, EditorView
 
-Port of the original editor's *look and controls* (not its logic), pixel-exact against the
-GUI oracle. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
+Port of the original editor's *look and controls* (not its logic), from the original's own
+artwork. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
 
 | File | What |
 |---|---|
@@ -18,7 +18,7 @@ GUI oracle. Layer numbers refer to `docs/GUI_ARCHITECTURE.md`.
 | `src/gui/controls/AniDisplay.*` | TAniDisplay (unit AniDisplay) |
 | `src/gui/controls/StaticControls.*` | TPanel, TLabel, TEdit (program name), picture-less TImage (menu areas) |
 | `src/gui/EditorView.*` | the form: all controls at their runtime positions, z-order, composition, mouse routing |
-| `tests/capi_gui.cpp`, `tests/test_gui_*.py` | C API and differential tests against the emulated original |
+| `oracle/gui_state.py` | reads the original controls' state in the emulator, for the asset extraction |
 
 ## Assets
 
@@ -52,7 +52,7 @@ of TWinControl.WMPaint) then `paint()` then the graphic children (labels on pane
 
 ## Controls
 
-Field offsets are those of the original objects (used by `tests/test_gui_state.py`).
+Field offsets are those of the original objects (used by `oracle/gui_state.py`).
 
 ### LcdDisplay (TLCD3, 0x45733c-0x4587d8)
 * geometry: char size from the GIF (+0x1f8/+0x1fc), gaps (+0x200/+0x204), frame (+0x208/
@@ -146,28 +146,8 @@ moves to the knob however far outside the window the travelled point lands.
 
 ## Verification
 
-```
-cmake -S . -B build -G Ninja -DSQ8L_BUILD_PLUGIN=OFF && cmake --build build
-SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_render.py
-SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_controls.py
-```
-
-* `test_gui_render.py`: 162 original states (start-up, all 21 page buttons with their
-  scrolled sub-pages, knob drags incl. horizontal distance and Shift on both rows, hover frames
-  and hints, pressed and press-cancelled buttons, MONO/SYNC/AM on/off, program up/down, bank
-  switches, LCD clicks/drags/double/right clicks, voices counter with notes playing, programs
-  45/135/301/383 at start-up). The state of every original control is read from emulator
-  memory and loaded into a fresh C++ EditorView: **0 differing pixels in 43 million pixels**
-  compared outside the masked text (116 distinct frames, 51 distinct LCD contents, 62 knob
-  frames). Masked: StatusLabel1, StatusLabel2 (label rectangles clipped to their panels) and
-  the progNameEdit rectangle; their non-text pixels around are compared.
-* `test_gui_controls.py`: all 435 sprite frames + background; EditorView defaults (411 checks);
-  4000 random TGraphKnobB method calls on an original knob vs the C++ knob, all 28 fields
-  bit-exact after every call + frame index; 1500 random `writeText` calls (cells, dirty flags);
-  600 TAniDisplay setter calls; 25 random knob/LED value frames; 30 incremental LCD repaints on
-  a persistent C++ view (dirty-cell path); 715 mouse messages replayed on both (knob drags,
-  double clicks, right clicks, button hover/press/leave/cross-moves, LCD cell events, menu
-  areas, form) with identical capture, event streams and control state after each message.
+`sq8l_hd_check`, `sq8l_drawn_check` and `tests/test_gui_extensions.py` (through
+`tests/capi_gui_logic.cpp`), all three in CI.
 
 ## Notes for the editor-logic port (layer 3)
 

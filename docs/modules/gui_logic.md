@@ -3,8 +3,8 @@
 Port of the original editor's *behaviour* (unit plugEdit = TplugEditForm, unit lcdControl =
 ClcdCtr, the page set up FUN_0047e340, the value formatters of unit editBuffer, the jumping
 mouse, the dialogs) on top of the ported controls of layers 1-2 (`docs/modules/gui_controls.md`).
-Layer numbers refer to `docs/GUI_ARCHITECTURE.md`. Verified differentially against the original
-running in the emulator (`tests/test_gui_logic.py`).
+Layer numbers refer to `docs/GUI_ARCHITECTURE.md`. Ported against the original running in the
+emulator.
 
 | File | What |
 |---|---|
@@ -19,7 +19,7 @@ running in the emulator (`tests/test_gui_logic.py`).
 | `src/gui/logic/EditorHost.h` | what the engine supplies: edit buffer, library, settings, panic, voices, MIDI ports |
 | `src/gui/logic/ViewState.h` | where the logic's output lands in EditorView (table) |
 | `re/scripts/extract_gui_logic_data.py` | generates `data/GuiLogicData.cpp` from the original (see below) |
-| `tests/capi_gui_logic.cpp`, `tests/test_gui_logic.py` | C API and differential test |
+| `tests/capi_gui_logic.cpp`, `tests/test_gui_extensions.py` | C API and the port's own tests |
 
 ## Using it
 
@@ -141,62 +141,9 @@ platform grabs the keyboard accordingly.
 
 ## Verification
 
-`SQ8L_TESTAPI=$PWD/build/libsq8l_testapi.dylib .venv/bin/python tests/test_gui_logic.py [scenario ...]`
-
-The original editor runs in the emulator (oracle/gui_driver.Editor); the port is an EditorView +
-EditorController with the same engine state (library, edit buffer, settings copied from the
-emulated process). Both get the same input (Win32 mouse messages in form coordinates, timer
-ticks, WM_CONTEXTMENU, focus, MIDI input) and the same scripted answers (popup menu paths,
-message box results, file paths, dialog actions). After every step the complete state is
-compared: VFD and program display cells (character + attribute), all knob fields, button / LED
-states, status texts, name edit, page controller (page, sub-page, locks, message timer, every
-field's value / text / highlight), form fields, mouse jump, the edit buffer image, settings,
-optionally the library, and every event: message boxes, file dialogs, modal dialog contents,
-info windows, SetCursorPos, MIDI output.
-
-The popup menu **trees are not compared** with the original. The port regroups OPTIONS and adds
-items the original has no counterpart for, and GUI parity is not a goal of the port, so
-asserting the tree would only generate churn. The menus are still driven by the scripted popup
-paths, so every command they dispatch is exercised and its effect on the state and the edit
-buffer is compared as before.
-
-The OPTIONS layout is likewise not asserted in `tests/test_gui_extensions.py`; it locates the
-items it clicks by caption. The grouping is left to inspection.
-
-To run the modal dialogs of the original the test patches PeekMessage / DispatchMessage (the
-VCL modal loop gets the posted messages, then the messages of the scripted user actions) and
-emulates the LISTBOX / multi-line EDIT / check box messages the dialogs use, the file dialogs
-(answers written into OPENFILENAME, files in `oracle/sandbox/T/gl`) and winmm MIDI (port names,
-open, SysEx out recorded, SysEx in through the input callback).
-
-| Scenario | Content | Checks |
-|---|---|---|
-| pages | page tree field by field; every value (min-1 .. max+1) of every parameter of every sub-page through the page controller; the value popup of every parameter | 22 241 |
-| basic | every page button and sub-page: 10 knob drags (vertical, horizontal fine), VFD click / double click with a popup choice / drags up and down on every field | 2 821 |
-| programs/menus | up / down / bank, program popups (numLcd, name), page popup at many places, every OPTIONS item, FILE / INFO, buttons, hints over every control and VFD cell | 319 |
-| dialogs | 17 WRITE / compare dialog scripts, modulation usage of 40 programs, about, program name editing | 73 |
-| files | library / bank save-load-init (answers OK / cancel, junk / empty / missing files), SysEx program and bank import / export | 96 |
-| midi | port dialogs (open failing / succeeding), SEND dump bytes, REQ, received dumps (complete, short, foreign, corrupt) | 38 |
-| host | 30 program changes from the host | 66 |
-| random | 3 seeds x 350 random actions of all kinds | 1 050 |
-
-Result (full run, about 55 s): 26 705 checks, 0 differences. Events compared: 931 popup menus,
-63 message boxes, 36 file dialogs, 109 modal dialogs, 54 modulation usage windows, 6 about
-windows, 10 MIDI outputs, 2 527 cursor jumps.
-
-Coverage (pages x parameters x actions), printed at the end of the run:
-
-| Action | Parameters (of 364) |
-|---|---|
-| set through the page controller, every value | 364 |
-| value popup shown | 364 |
-| selected by a VFD click | 248 |
-| changed by a VFD drag | 234 |
-| changed by a knob drag / horizontal fine drag | 200 / 216 |
-| changed by a popup choice | 117 (+21 random) |
-| changed by any GUI gesture | 248 of the 248 editable ones (the other 116 are labels, min = max) |
-
-All 18 pages and 33 sub-pages; all 21 page buttons; every OPTIONS / FILE / INFO item.
+`tests/test_gui_extensions.py` (through `tests/capi_gui_logic.cpp`), in CI. The OPTIONS
+layout is not asserted there: the test locates the items it clicks by caption, and the
+grouping is left to inspection.
 
 ## OPTIONS layout (port)
 
@@ -220,13 +167,11 @@ of the emulation. The original's "Mouse position is restored after..." submenu a
 "Right click on display -> scroll page" item are one `Mouse` submenu, with the children reworded
 because the originals only read correctly under the old parent's phrasing. `MTS-ESP` carries the
 checkmark of its own `Enable` child, so the state shows without opening the submenu. Everything
-except Voice stealing mode, Emulation preferences and Mouse is a port addition and appears only
-with `portExtensions()`; without it the menu degrades to those three.
+except Voice stealing mode, Emulation preferences and Mouse is a port addition.
 
 **Indices are recorded as the items go in.** `buildMenus` keeps a `size_t` per cached
-`MenuNode*` and resolves the pointers once the vector is final, because the conditional port
-items shift everything after them and hard-coded positions silently rewired the wrong setting
-whenever the layout changed.
+`MenuNode*` and resolves the pointers once the vector is final, because hard-coded positions
+silently rewired the wrong setting whenever the layout changed.
 
 ## Changes outside src/gui/logic
 
